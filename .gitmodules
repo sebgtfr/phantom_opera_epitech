@@ -1,0 +1,3 @@
+[submodule "Intro-AI"]
+	path = Intro-AI
+	url = git@github.com:nlehir/Intro-AI.git
