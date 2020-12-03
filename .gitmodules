@@ -1,3 +1,6 @@
 [submodule "Intro-AI"]
 	path = Intro-AI
 	url = git@github.com:nlehir/Intro-AI.git
+[submodule "phantom_opera"]
+	path = phantom_opera
+	url = git@github.com:nlehir/phantom_opera.git
