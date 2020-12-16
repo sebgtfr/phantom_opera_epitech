@@ -32,7 +32,7 @@ fantom_logger.addHandler(stream_handler)
 
 
 class Player():
-
+    
     def __init__(self):
         self.end = False
         self.is_tier_list_init = True
@@ -41,6 +41,7 @@ class Player():
         self.tier_list = ["red", "white", "brown", "pink", "purple", "black"]
         self.not_in_tier_list = ["blue", "grey"]
         self.will_scream = True
+        self.is_suspect = False
 
     def connect(self):
         self.socket.connect((host, port))
