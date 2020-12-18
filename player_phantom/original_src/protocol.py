@@ -1,6 +1,5 @@
 import struct
 
-
 def recvall(sock, count):
     buf = b''
     while count:
