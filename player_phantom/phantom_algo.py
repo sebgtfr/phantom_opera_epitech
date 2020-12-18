@@ -4,7 +4,7 @@ import os
 import random
 import socket
 from logging.handlers import RotatingFileHandler
-
+from copy import deepcopy
 from original_src import protocol
 
 host = "localhost"
@@ -29,15 +29,16 @@ fantom_logger.addHandler(file_handler)
 stream_handler = logging.StreamHandler()
 stream_handler.setLevel(logging.WARNING)
 fantom_logger.addHandler(stream_handler)
-passages = [[1, 4], [0, 2], [1, 3], [2, 7], [0, 8, 5],
+original_passages = [[1, 4], [0, 2], [1, 3], [2, 7], [0, 8, 5],
             [4, 6], [5, 7], [9, 3, 6], [9, 4], [8, 7]]
 
-pink_passages = [[1, 4], [0, 2, 5, 7], [1, 3, 6], [2, 7], [0, 8, 5, 9],
+original_pink_passages = [[1, 4], [0, 2, 5, 7], [1, 3, 6], [2, 7], [0, 8, 5, 9],
                 [8, 1, 4, 6], [9, 2, 5, 7], [9, 3, 6, 1],[9, 4, 5],
                 [8, 4, 6, 7]]
 
 class Player():
 
+    passages
     def __init__(self):
         self.end = False
         self.is_init_once = True
@@ -45,6 +46,9 @@ class Player():
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.tier_list = ["red", "white", "brown", "pink", "purple", "black"]
         self.not_in_tier_list = ["blue", "grey"]
+        self.passages = None
+        self.pink_passages = None
+        self.blocked_passage= None
         self.will_scream = True
         self.in_dark_room = True
 
@@ -53,8 +57,50 @@ class Player():
 
     def reset(self):
         self.socket.close()
+    
+
+    def get_available_room_from_pos(self, nbr_person_in_room, initial_pos, characters_passage):
+        full_pos_available = characters_passage[initial_pos]
+        room_already_check = [initial_pos]
+        room_to_check = characters_passage[initial_pos]
+        while (idx < nbr_person_in_room - 1):
+            tmp_room_to_check = []
+            for pos in room_to_check:
+                if pos not in room_already_check:
+                    full_pos_available = list(set(full_pos_available + characters_passage[pos]))
+                    tmp_room_to_check = tmp_room_to_check + characters_passage[pos]
+                    room_already_check.append(pos)
+            room_to_check = list(set(tmp_room_to_check))
+            idx += 1
+        return full_pos_available
+
+
+    def get_phantom_pos(game_data):
+        fantom = game_data["game state"]["fantom"]
+        characters = game_data["game state"]["characters"]
+        fantom_pos = -1
+        for character in characters:
+            if character['color'] == fantom:
+                fantom_pos = character["position"]
+        return fantom_pos
+
+
+    def get_number_person_in_room(self, room_pos, game_state):
+        nbr_person_in_room = 0
+        fantom_pos = -1
+        characters = game_state["characters"]
+        fantom = game_state["fantom"]
+        for character in characters:
+            if (character["position"] == room_pos):
+                nbr_person_in_room += 1
+            if character['color'] == fantom:
+                fantom_pos = character["position"]
+        return nbr_person_in_room, fantom_pos
 
     def try_to_be_with_phantom(self, character, game_data):
+        nbr_person_in_room = self.get_number_person_in_room(character["position"], game_data["game state"])
+        phantom_pos = self.get_phantom_pos(game_data)
+        room_available_from_pos = self.get_available_room(phantom_pos, nbr_person_in_room, character["position"])
         #créer une fonction pour savoir combien de personnes se trouve dans la salle.
         #puis en fonction du nombre de personnes dans la salle essayer de voir tous les pass possibles.
         #ensuite voir si dans les paths y'a la position du fantome
@@ -63,7 +109,7 @@ class Player():
 
     def do_suspect_thing(self, character, game_data):
         if self.in_dark_room:
-            self.try_to_be_with_phantom(character, game_data["game state"]["characters"])
+            self.try_to_be_with_phantom(character,game_data["game state"])
         #else:
             #self.try_to_be_alone()
         
@@ -96,15 +142,29 @@ class Player():
         # log
         fantom_logger.debug("|\n|")
         fantom_logger.debug("fantom answers")
+        
         fantom_logger.debug(f"question type ----- {question['question type']}")
         fantom_logger.debug(f"data -------------- {data}")
         fantom_logger.debug(f"response index ---- {response_index}")
         fantom_logger.debug(f"response ---------- {data[response_index]}")
+        toto = question["game state"]
+        tata = "a"
+        fantom_logger.debug(f"characters ---------- {toto}")
+        fantom_logger.debug(f"nbr in room ---------- {self.get_number_person_in_room(3, toto)}")
         return response_index
 
-    def init_passages(self, blocked):
-        passages[blocked[0]].remove(blocked[1])
-        passages[blocked[1]].remove(blocked[0])
+    def define_passages(self, blocked):
+        try:
+            if self.blocked_passage != blocked:
+                self.blocked_passage = blocked
+                self.pink_passages = original_pink_passages.deepcopy()
+                self.passages = original_passages.deepcopy()
+                self.passages[blocked[0]].remove(blocked[1])
+                self.passages[blocked[1]].remove(blocked[0])
+                self.pink_passages[blocked[0]].remove(blocked[1])
+                self.pink_passages[blocked[1]].remove(blocked[0])
+        except:
+            pass
 
     def init_tier_list(self, data):
         fantom = data["game state"]["fantom"]
@@ -122,7 +182,7 @@ class Player():
         data = json.loads(data)
         if self.is_init_once is True:
             self.init_tier_list(data)
-            self.init_passages(data["game state"]["blocked"])
+        self.define_passages(data["game state"]["blocked"])
         response = self.answer(data)
         # send back to server
         bytes_data = json.dumps(response).encode("utf-8")
