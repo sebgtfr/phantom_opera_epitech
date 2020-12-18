@@ -38,7 +38,6 @@ original_pink_passages = [[1, 4], [0, 2, 5, 7], [1, 3, 6], [2, 7], [0, 8, 5, 9],
 
 class Player():
 
-    passages
     def __init__(self):
         self.end = False
         self.is_init_once = True
@@ -63,6 +62,7 @@ class Player():
         full_pos_available = characters_passage[initial_pos]
         room_already_check = [initial_pos]
         room_to_check = characters_passage[initial_pos]
+        idx = 0
         while (idx < nbr_person_in_room - 1):
             tmp_room_to_check = []
             for pos in room_to_check:
@@ -74,18 +74,7 @@ class Player():
             idx += 1
         return full_pos_available
 
-
-    def get_phantom_pos(game_data):
-        fantom = game_data["game state"]["fantom"]
-        characters = game_data["game state"]["characters"]
-        fantom_pos = -1
-        for character in characters:
-            if character['color'] == fantom:
-                fantom_pos = character["position"]
-        return fantom_pos
-
-
-    def get_number_person_in_room(self, room_pos, game_state):
+    def get_number_person_in_room_and_fantom_pos(self, room_pos, game_state):
         nbr_person_in_room = 0
         fantom_pos = -1
         characters = game_state["characters"]
@@ -97,10 +86,10 @@ class Player():
                 fantom_pos = character["position"]
         return nbr_person_in_room, fantom_pos
 
-    def try_to_be_with_phantom(self, character, game_data):
-        nbr_person_in_room = self.get_number_person_in_room(character["position"], game_data["game state"])
-        phantom_pos = self.get_phantom_pos(game_data)
-        room_available_from_pos = self.get_available_room(phantom_pos, nbr_person_in_room, character["position"])
+    def try_to_be_with_fantom(self, character, game_data):
+        nbr_person_in_room, fantom_pos = self.get_number_person_in_room_and_fantom_pos(character["position"], game_data["game state"])
+        room_available_from_pos = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
+        print(room_available_from_pos)
         #créer une fonction pour savoir combien de personnes se trouve dans la salle.
         #puis en fonction du nombre de personnes dans la salle essayer de voir tous les pass possibles.
         #ensuite voir si dans les paths y'a la position du fantome
@@ -109,7 +98,7 @@ class Player():
 
     def do_suspect_thing(self, character, game_data):
         if self.in_dark_room:
-            self.try_to_be_with_phantom(character,game_data["game state"])
+            self.try_to_be_with_fantom(character,game_data["game state"])
         #else:
             #self.try_to_be_alone()
         
@@ -138,6 +127,8 @@ class Player():
         #    self.will_scream_function(question)
         data = question["data"]
         #game_state = question["game state"]
+        #character_to_use = self.get_character_to_use(question["data"])
+        #self.try_to_be_with_fantom(character_to_use, question)
         response_index = random.randint(0, len(data)-1)
         # log
         fantom_logger.debug("|\n|")
@@ -147,18 +138,14 @@ class Player():
         fantom_logger.debug(f"data -------------- {data}")
         fantom_logger.debug(f"response index ---- {response_index}")
         fantom_logger.debug(f"response ---------- {data[response_index]}")
-        toto = question["game state"]
-        tata = "a"
-        fantom_logger.debug(f"characters ---------- {toto}")
-        fantom_logger.debug(f"nbr in room ---------- {self.get_number_person_in_room(3, toto)}")
         return response_index
 
     def define_passages(self, blocked):
         try:
             if self.blocked_passage != blocked:
                 self.blocked_passage = blocked
-                self.pink_passages = original_pink_passages.deepcopy()
-                self.passages = original_passages.deepcopy()
+                self.pink_passages = deepcopy(original_pink_passages)
+                self.passages = deepcopy(original_passages)
                 self.passages[blocked[0]].remove(blocked[1])
                 self.passages[blocked[1]].remove(blocked[0])
                 self.pink_passages[blocked[0]].remove(blocked[1])
