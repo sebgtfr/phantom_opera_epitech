@@ -9,8 +9,11 @@ from original_src import protocol
 
 host = "localhost"
 port = 12000
+#try_to_be_alone ou dans une dark room !!!
 # HEADERSIZE = 10
-
+# créer les réponses en fonction du type de question.
+# Si c'est character on rentre dans la foncton tier list etc etc sinon on fait les actions défini par tier list
+# Ne pas oublier de choisir une réponse pour le character qu'on a choisit !!!
 """
 set up fantom logging
 """
@@ -115,8 +118,8 @@ class Player():
                 suspects.append(character['color'])
         return nbr_person_in_room, fantom_pos, suspects
 
-    def try_to_be_with_fantom(self, character, game_data):
-        nbr_person_in_room, fantom_pos, suspects = self.get_number_person_in_room_and_fantom_pos_and_nbr_sus(character["position"], game_data["game state"])
+    def try_to_be_with_fantom(self, character, game_state):
+        nbr_person_in_room, fantom_pos, suspects = self.get_number_person_in_room_and_fantom_pos_and_nbr_sus(character["position"], game_state)
         if character["color"] == "pink":
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
         else:
@@ -124,7 +127,7 @@ class Player():
         if fantom_pos in room_available:
             self.answer_data["pos"] = fantom_pos
         else:
-            self.answer_data["pos"] = get_room_pos_character_alone(game_data["game state"]["characters"], room_available)
+            self.answer_data["pos"] = self.get_room_pos_character_alone(game_state["characters"], room_available)
         #créer une fonction pour savoir combien de personnes se trouve dans la salle.
         #puis en fonction du nombre de personnes dans la salle essayer de voir tous les pass possibles.
         #ensuite voir si dans les paths y'a la position du fantome
@@ -148,30 +151,33 @@ class Player():
         return pos
 
 
-    def try_to_be_alone(self, character, game_data):
-        nbr_person_in_room, fantom_pos, suspects = self.get_number_person_in_room_and_fantom_pos_and_nbr_sus(character["position"], game_data["game state"])
+    def try_to_be_alone(self, character, game_state):
+        nbr_person_in_room, fantom_pos, suspects = self.get_number_person_in_room_and_fantom_pos_and_nbr_sus(character["position"], game_state["game state"])
         if character["color"] == "pink":
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
         else:
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
-        pos = self.get_pos_empty_and_innocent_room(game_data["game state"]["characters"], room_available, False)
+        pos = self.get_pos_empty_and_innocent_room(game_state["game state"]["characters"], room_available, False)
         self.answer_data["pos"] = pos
 
-    def do_suspect_thing(self, character, game_data):
+    def do_suspect_thing(self, character, game_state):
         if self.in_dark_room is True:
-            self.try_to_be_with_fantom(character,game_data["game state"])
+            self.try_to_be_with_fantom(character,game_state)
         else:
-            self.try_to_be_alone(character, game_data["game state"])
+            self.try_to_be_alone(character, game_state)
         
     def get_character_to_use(self, characters):
         smallest_idx = None
         character_to_use = None
+        character_idx = 0
         for character in characters:
             color = character["color"]
             idx = self.tier_list.index(color)
             if (smallest_idx is None or idx < smallest_idx):
                 smallest_idx = idx
                 character_to_use = character
+                self.answer_data["character_idx"] = character_idx
+            character_idx += 1
         return character_to_use
 
     def try_to_be_alone_or_with_innocent(self, character, game_data):
@@ -199,7 +205,7 @@ class Player():
         else:
             self.try_to_be_alone_or_with_innocent(character, game_data)
 
-    def do_innocent_thing(character, game_data):
+    def do_innocent_thing(self, character, game_data):
         if character["color"] == "brown":
             self.brown_function(character, game_data)
         else:
@@ -209,32 +215,148 @@ class Player():
     def will_scream_function(self, game_data):
         character_to_use = self.get_character_to_use(game_data["data"])
         if character_to_use["suspect"] is True:
-            self.do_suspect_thing(character_to_use, game_data)
+            self.do_suspect_thing(character_to_use, game_data["game state"])
         else:
             self.do_innocent_thing(character_to_use, game_data)
 
+    def fantom_is_alone_and_get_room(self, game_state):
+        fantom_color = game_state['fantom']
+        characters = game_state["characters"]
+        positions = [0,0,0,0,0,0,0,0,0,0]
+        suspects_room = [0,0,0,0,0,0,0,0,0,0]
+        empty_room = [0,0,0,0,0,0,0,0,0,0]
+        innocents_room = [0,0,0,0,0,0,0,0,0,0]
+        fantom = None
+        for character in characters:
+            positions[character["position"]] += 1
+            if character["color"] == fantom_color:
+                fantom = character
+            if character["suspect"] is True:
+                suspects_room[character["position"]] += 1
+            elif character["suspect"] is False:
+                innocents_room[character["position"]] += 1
+            empty_room[character["position"]] += 1
+        if positions[fantom["position"]] == 1:
+            suspects_room[game_state['shadow']] = -1
+            max_suspects = max(suspects_room)
+            max_suspects_room = [i for i, j in enumerate(suspects_room) if j == max_suspects]
+            return True, max_suspects_room
+        final_empty_room = [i for i, j in enumerate(empty_room) if j == 0]
+        final_innocents_room = []
+        for i in range(innocents_room):
+            if innocents_room[i] >= 1 and suspects_room[i] == 0:
+                final_innocents_room.append(i)
+        
+        return False, final_innocents_room + final_empty_room
+
+
+    def get_rooms_for_dark(self, game_state, get_max):
+        characters = game_state["characters"]
+        suspects_room = [0,0,0,0,0,0,0,0,0,0]
+        empty_room = [0,0,0,0,0,0,0,0,0,0]
+        innocents_room = [0,0,0,0,0,0,0,0,0,0]
+        for character in characters:
+            if character["suspect"] is True:
+                suspects_room[character["position"]] += 1
+            elif character["suspect"] is False:
+                innocents_room[character["position"]] += 1
+            empty_room[character["position"]] += 1
+        if get_max is True:
+            suspects_room[game_state['shadow']] = -1
+            max_suspects = max(suspects_room)
+            max_suspects_room = [i for i, j in enumerate(suspects_room) if j == max_suspects]
+            return max_suspects_room
+        final_empty_room = [i for i, j in enumerate(empty_room) if j == 0]
+        final_innocents_room = []
+        for i in range(innocents_room):
+            if innocents_room[i] >= 1 and suspects_room[i] == 0:
+                final_innocents_room.append(i)
+        
+        return final_innocents_room + final_empty_room
+
+
+    def set_dark_room(self, game_state):
+        response_index = 0
+        rooms = []
+        if self.in_dark_room is True:
+            self.in_dark_room = False
+            is_alone, rooms = self.fantom_is_alone(game_state)
+            if is_alone is False:
+                self.will_scream = False
+            response_index = random.choice(rooms)
+        elif self.in_dark_room is False and self.will_scream is True:
+            rooms = self.get_rooms_for_dark(game_state, True)
+        elif self.in_dark_room is False and self.will_scream is False:
+            rooms = self.get_rooms_for_dark(game_state, True)
+        response_index = random.choice(rooms)
+        return response_index
+
+
+
+
+    def character_power(self, game_data):
+        question_type = game_data['question type']
+        response_data = game_data['data']
+        response_index = 0
+        if "blue" in question_type:
+            response_index = random.choice(response_data)
+        if "grey" in question_type:
+            response_index = response_data.index(self.set_dark_room(game_data["game state"]))
+        if "brown" in question_type:
+            response_index = response_data.index(answer_data["brown_data"])
+        return response_index
+
+    def try_to_stay_suspect(self, game_state, room_available):
+        characters = game_state["characters"]
+        room_with_someone = {}
+        for character in characters:
+            pos = character["position"]
+            if pos in room_available and pos != game_state['shadow']:
+                room_with_someone[pos] = True
+        if len(room_with_someone.keys()) > 0:
+            self.answer_data["pos"] = random.choice(list(room_with_someone))
+        else:
+            if game_state['shadow'] in room_available:
+                del room_available[room_available.index(game_state['shadow'])]
+            self.answer_data["pos"] = random.choice(room_available)
+
+    def will_not_scream_function(self, game_data):
+        character = self.get_character_to_use(game_data["data"])
+        if character["color"] == "pink":
+            room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
+        else:
+            room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
+        if character["suspect"] is True:
+            self.try_to_stay_suspect(game_data["game_state"], room_available)
+        else:
+            pos = random.choice(room_available)
+            self.answer_data["pos"] = pos
 
     def answer(self, question):
         #ne pas oublier de faire une fonction pour choisir cec qu'il faut faire ne fonction de la question type
         # work
-        #self.answer_data = {}
         #if self.will_scream is True:
         #    self.will_scream_function(question)
         data = question["data"]
         #game_state = question["game state"]
         #character_to_use = self.get_character_to_use(question["data"])
         #self.try_to_be_with_fantom(character_to_use, question)
-        response_index = random.randint(0, len(data)-1)
         # log
-        fantom_logger.debug("|\n|")
-        fantom_logger.debug("fantom answers")
         if question['question type'] == "select character":
-            #character = self.get_character_to_use(question["data"])
-            character = data[response_index]
-            nbr_person_in_room, fantom_pos = self.get_number_person_in_room_and_fantom_pos_and_nbr_sus(character["position"], question["game state"])
-            room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
-            pos = self.get_room_pos_character_alone(question["game state"]["characters"], room_available)
-            fantom_logger.debug(f"room_available {room_available}")
+            self.answer_data = {}
+            self.answer_data["activate_power"] = 0
+            if self.will_scream is True:
+                self.will_scream_function(question)
+            else:
+                self.will_not_scream_function(question)
+            response_index = self.answer_data["character_idx"]
+        elif question['question type'] == "select position":
+            response_index = data.index(self.answer_data["pos"])
+        elif "activate" in question['question type']:
+            response_index = self.answer_data["activate_power"]
+        elif "character power" in question['question type']:
+            response_index = self.character_power(question)
+        fantom_logger.debug("fantom answers")
         fantom_logger.debug(f"question type ----- {question['question type']}")
         fantom_logger.debug(f"data -------------- {data}")
         fantom_logger.debug(f"response index ---- {response_index}")
