@@ -400,6 +400,129 @@ class Player():
         self.in_dark_room = self.in_dark(fantom, all_rooms, game_data["game state"])
         self.will_scream = self.can_actually_scream(fantom, game_data["game state"]["characters"], all_rooms, game_data["game state"])
 
+    def fantom_is_alone_and_get_room(self, game_state):
+        fantom_color = game_state['fantom']
+        characters = game_state["characters"]
+        positions = [0,0,0,0,0,0,0,0,0,0]
+        suspects_room = [0,0,0,0,0,0,0,0,0,0]
+        empty_room = [0,0,0,0,0,0,0,0,0,0]
+        innocents_room = [0,0,0,0,0,0,0,0,0,0]
+        fantom = None
+        for character in characters:
+            positions[character["position"]] += 1
+            if character["color"] == fantom_color:
+                fantom = character
+            if character["suspect"] is True:
+                suspects_room[character["position"]] += 1
+            elif character["suspect"] is False:
+                innocents_room[character["position"]] += 1
+            empty_room[character["position"]] += 1
+        if positions[fantom["position"]] == 1:
+            suspects_room[game_state['shadow']] = -1
+            max_suspects = max(suspects_room)
+            max_suspects_room = [i for i, j in enumerate(suspects_room) if j == max_suspects]
+            return True, max_suspects_room
+        final_empty_room = [i for i, j in enumerate(empty_room) if j == 0]
+        final_innocents_room = []
+        for i in range(innocents_room):
+            if innocents_room[i] >= 1 and suspects_room[i] == 0:
+                final_innocents_room.append(i)
+        
+        return False, final_innocents_room + final_empty_room
+
+
+    def get_rooms_for_dark(self, game_state, get_max):
+        characters = game_state["characters"]
+        suspects_room = [0,0,0,0,0,0,0,0,0,0]
+        empty_room = [0,0,0,0,0,0,0,0,0,0]
+        innocents_room = [0,0,0,0,0,0,0,0,0,0]
+        for character in characters:
+            if character["suspect"] is True:
+                suspects_room[character["position"]] += 1
+            elif character["suspect"] is False:
+                innocents_room[character["position"]] += 1
+            empty_room[character["position"]] += 1
+        if get_max is True:
+            suspects_room[game_state['shadow']] = -1
+            max_suspects = max(suspects_room)
+            max_suspects_room = [i for i, j in enumerate(suspects_room) if j == max_suspects]
+            return max_suspects_room
+        final_empty_room = [i for i, j in enumerate(empty_room) if j == 0]
+        final_innocents_room = []
+        for i in range(innocents_room):
+            if innocents_room[i] >= 1 and suspects_room[i] == 0:
+                final_innocents_room.append(i)
+        
+        return final_innocents_room + final_empty_room
+
+
+    def set_dark_room(self, game_state):
+        response_index = 0
+        rooms = []
+        if self.in_dark_room is True:
+            self.in_dark_room = False
+            is_alone, rooms = self.fantom_is_alone(game_state)
+            if is_alone is False:
+                self.will_scream = False
+            response_index = random.choice(rooms)
+        elif self.in_dark_room is False and self.will_scream is True:
+            rooms = self.get_rooms_for_dark(game_state, True)
+        elif self.in_dark_room is False and self.will_scream is False:
+            rooms = self.get_rooms_for_dark(game_state, True)
+        response_index = random.choice(rooms)
+        return response_index
+
+
+
+
+    def character_power(self, game_data):
+        question_type = game_data['question type']
+        response_data = game_data['data']
+        response_index = 0
+        if "blue" in question_type:
+            response_index = random.choice(response_data)
+        if "grey" in question_type:
+            response_index = response_data.index(self.set_dark_room(game_data["game state"]))
+        if "brown" in question_type:
+            response_index = response_data.index(answer_data["brown_data"])
+        return response_index
+
+    def try_to_stay_suspect(self, game_state, room_available):
+        characters = game_state["characters"]
+        room_with_someone = {}
+        for character in characters:
+            pos = character["position"]
+            if pos in room_available and pos != game_state['shadow']:
+                room_with_someone[pos] = True
+        if len(room_with_someone.keys()) > 0:
+            self.answer_data["pos"] = random.choice(list(room_with_someone))
+        else:
+            if game_state['shadow'] in room_available:
+                del room_available[room_available.index(game_state['shadow'])]
+            self.answer_data["pos"] = random.choice(room_available)
+
+    def will_not_scream_function(self, game_data, character):
+        if character["color"] == "pink":
+            room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
+        else:
+            room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
+        if character["suspect"] is True:
+            self.try_to_stay_suspect(game_data["game_state"], room_available)
+        else:
+            pos = random.choice(room_available)
+            self.answer_data["pos"] = pos
+
+    def set_fantom_pos(self, character, game_data):
+        should_scream = self.have_to_scream(game_data["game state"]["characters"])
+        if character["color"] == "pink":
+            room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
+        else:
+            room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
+        if should_scream is True:
+            self.get_pos_empty_and_innocent_room_and_shadow_room(game_data["game state"]["characters"], room_available, game_data['shadow'], False)
+        else:
+            self.try_to_stay_suspect(game_data["game_state"], room_available)
+            
 
     def answer(self, question):
         #ne pas oublier de faire une fonction pour choisir cec qu'il faut faire ne fonction de la question type
