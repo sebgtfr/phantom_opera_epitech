@@ -61,6 +61,14 @@ class Player():
     def reset(self):
         self.socket.close()
 
+    def is_alone(self, character, characters):
+        for c in characters:
+            if c is not character:
+                if c["position"] == character["position"]:
+                    return False
+        return True
+
+
     def get_nb_suspect(self, characters):
         nb_suspect = 0
         for character in characters:
@@ -184,7 +192,7 @@ class Player():
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
         else:
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
-        pos = self.get_pos_empty_and_innocent_room_and_shadow_room(game_data["game state"]["characters"], room_available, game_data['shadow'], False)
+        pos = self.get_pos_empty_and_innocent_room_and_shadow_room(game_data["game state"]["characters"], room_available, game_data["game state"]['shadow'], False)
         self.answer_data["pos"] = pos
 
     def do_suspect_thing(self, character, game_data):
@@ -240,10 +248,10 @@ class Player():
 
 
     def will_scream_function(self, game_data, character):
-        if character_to_use["suspect"] is True:
-            self.do_suspect_thing(character_to_use, game_data)
+        if character["suspect"] is True:
+            self.do_suspect_thing(character, game_data)
         else:
-            self.do_innocent_thing(character_to_use, game_data)
+            self.do_innocent_thing(character, game_data)
 
     def fantom_is_alone_and_get_room(self, game_state):
         fantom_color = game_state['fantom']
@@ -326,6 +334,7 @@ class Player():
         response_index = 0
         if "blue" in question_type:
             response_index = random.choice(response_data)
+            response_index = response_data.index(response_index)
         if "grey" in question_type:
             response_index = response_data.index(self.set_dark_room(game_data["game state"]))
         if "brown" in question_type:
@@ -347,27 +356,50 @@ class Player():
             self.answer_data["pos"] = random.choice(room_available)
 
     def will_not_scream_function(self, game_data, character):
+        nbr_person_in_room, fantom_pos, suspects = self.get_number_person_in_room_and_fantom_pos_and_nbr_sus(character["position"], game_data["game state"])
         if character["color"] == "pink":
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
         else:
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
         if character["suspect"] is True:
-            self.try_to_stay_suspect(game_data["game_state"], room_available)
+            self.try_to_stay_suspect(game_data["game state"], room_available)
         else:
             pos = random.choice(room_available)
             self.answer_data["pos"] = pos
 
-    def set_fantom_pos(self, character, game_data):
+    def set_fantom_pos(self, game_data, character):
         should_scream = self.have_to_scream(game_data["game state"]["characters"])
+        nbr_person_in_room, fantom_pos, suspects = self.get_number_person_in_room_and_fantom_pos_and_nbr_sus(character["position"], game_data["game state"])
         if character["color"] == "pink":
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.pink_passages)
         else:
             room_available = self.get_available_room_from_pos(nbr_person_in_room, character["position"], self.passages)
         if should_scream is True:
-            self.get_pos_empty_and_innocent_room_and_shadow_room(game_data["game state"]["characters"], room_available, game_data['shadow'], False)
+            self.get_pos_empty_and_innocent_room_and_shadow_room(game_data["game state"]["characters"], room_available, game_data['game state']['shadow'], False)
         else:
-            self.try_to_stay_suspect(game_data["game_state"], room_available)
-            
+            self.try_to_stay_suspect(game_data["game state"], room_available)
+
+    def in_dark(self, character, rooms, game_state):
+        shadow_room = -1
+        for room in rooms:
+            if room is game_state["shadow"]:
+                shadow_room = room
+        return True if character["position"] == shadow_room else False
+
+    def can_actually_scream(self, character, characters, rooms, game_state):
+        return True if (self.is_alone(character, characters) is True or self.in_dark(character, rooms, game_state) is True) else False            
+
+    def set_dark_and_scream(self, game_data, character):
+        fantom_color = game_data["game state"]["fantom"]
+        all_rooms = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        characters = game_data["game state"]["characters"]
+        for character in characters:
+            if character["color"] == fantom_color:
+                fantom = character
+                break
+        self.in_dark_room = self.in_dark(fantom, all_rooms, game_data["game state"])
+        self.will_scream = self.can_actually_scream(fantom, game_data["game state"]["characters"], all_rooms, game_data["game state"])
+
 
     def answer(self, question):
         #ne pas oublier de faire une fonction pour choisir cec qu'il faut faire ne fonction de la question type
@@ -382,9 +414,10 @@ class Player():
         if question['question type'] == "select character":
             self.answer_data = {}
             self.answer_data["activate_power"] = 0
-            character_to_use = self.get_character_to_use(game_data["data"])
+            character_to_use = self.get_character_to_use(data)
             #functions to set in dark_room and if suspects here
-            if character_to_use['color'] == data["game state"]["fantom"]:
+            self.set_dark_and_scream(question, character_to_use)
+            if character_to_use['color'] == question["game state"]["fantom"]:
                 self.set_fantom_pos(question, character_to_use)
             else:
                 if self.will_scream is True:
