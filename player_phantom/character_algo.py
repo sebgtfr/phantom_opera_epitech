@@ -121,6 +121,13 @@ class Player():
         nb_exculpate = self.how_many_will_be_exculpate(characters)
         return False if nb_exculpate < nb_suspect / 2 else True
 
+    def in_dark(self, character, rooms, game):
+        shadow_room = -1
+        for room in rooms in range(10):
+            if room is game.shadow:
+                shadow_room = room
+        return True if character["position"] == shadow_room else False
+
 
     def get_room_pos_character_alone(self, characters, room_available):
         room_with_someone = {}
