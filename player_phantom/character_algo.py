@@ -121,10 +121,13 @@ class Player():
         nb_exculpate = self.how_many_will_be_exculpate(characters)
         return False if nb_exculpate < nb_suspect / 2 else True
 
-    def in_dark(self, character, rooms, game):
+    def can_actually_scream(self, character, characters, rooms, game_state):
+        return True if (self.is_alone(character, characters) is True or self.in_dark(character, rooms, game_state) is True) else False
+
+    def in_dark(self, character, rooms, game_state):
         shadow_room = -1
         for room in rooms in range(10):
-            if room is game.shadow:
+            if room is game_state.shadow:
                 shadow_room = room
         return True if character["position"] == shadow_room else False
 
